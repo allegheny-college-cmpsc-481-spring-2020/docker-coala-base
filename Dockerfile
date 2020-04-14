@@ -1,46 +1,44 @@
 FROM opensuse:tumbleweed
 MAINTAINER The coala developers - coala-devel@googlegroups.com
-
 ARG branch=master
 RUN echo branch=$branch
-
 # Set the locale
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US:en \
     PATH=$PATH:/root/pmd-bin-5.4.1/bin:/root/dart-sdk/bin:/coala-bears/node_modules/.bin:/root/bakalint-0.4.0:/root/elm-format-0.18 \
     NODE_PATH=/coala-bears/node_modules
-
 # Create symlink for cache
 RUN mkdir -p /root/.local/share/coala && \
   ln -s /root/.local/share/coala /cache
-
-
+RUN zypper --non-interactive dup
+RUN zypper ref
+RUN zypper patch
 RUN \
   zypper addlock \
     postfix \
     'julia < 0.6' 'julia >= 0.7' julia-compat \
     && \
   # Remove unnecessary repos to avoid refreshes
-  zypper removerepo 'NON-OSS' && \
+  zypper removerepo 'non-oss' && \
   # Package dependencies
   echo 'Running zypper install ...' && \
   (time zypper -vv --no-gpg-checks --non-interactive \
       # nodejs 7
-      --plus-repo http://download.opensuse.org/repositories/devel:languages:nodejs/openSUSE_Tumbleweed/ \
+      --plus-repo http://download.opensuse.org/repositories/devel:/languages:/nodejs/openSUSE_Tumbleweed/ \
       # science contains latest Julia
       --plus-repo http://download.opensuse.org/repositories/science/openSUSE_Tumbleweed/ \
       # luarocks
-      --plus-repo http://download.opensuse.org/repositories/devel:languages:lua/openSUSE_Factory/ \
+      --plus-repo http://download.opensuse.org/repositories/devel:/languages:/lua/openSUSE_Tumbleweed/ \
       # brotlipy
-      --plus-repo http://download.opensuse.org/repositories/devel:languages:python/openSUSE_Tumbleweed/ \
+      --plus-repo http://download.opensuse.org/repositories/devel:/languages:/python/openSUSE_Tumbleweed/ \
       # ruby 2.2
-      --plus-repo http://download.opensuse.org/repositories/devel:languages:ruby/openSUSE_Tumbleweed/ \
+      --plus-repo http://download.opensuse.org/repositories/devel:/languages:/ruby/openSUSE_Tumbleweed/ \
       # flawfinder
       --plus-repo http://download.opensuse.org/repositories/home:illuusio/openSUSE_Tumbleweed/ \
       # astyle
       --plus-repo http://download.opensuse.org/repositories/devel:tools/openSUSE_Tumbleweed/ \
       # Python 3 packages
-      --plus-repo http://download.opensuse.org/repositories/devel:languages:python3/openSUSE_Tumbleweed/ \
+      --plus-repo https://download.opensuse.org/repositories/devel:/languages:/python/openSUSE_Tumbleweed/ \
       # stable packages built for coala
       --plus-repo http://download.opensuse.org/repositories/home:jayvdb:coala/openSUSE_Tumbleweed/ \
       install --replacefiles --download-in-advance \
@@ -67,7 +65,8 @@ RUN \
     libopenssl-devel \
     # pcre needed by Julia runtime
     libpcre2-8-0 \
-    libpython3_6m1_0 \
+    #libpython3_6m1_0 \
+    libpython3_8m1_0 \
     libxml2-devel \
     # libxml2-tools provides xmllint
     libxml2-tools \
@@ -83,7 +82,7 @@ RUN \
     nltk-data-averaged_perceptron_tagger \
     nltk-data-punkt \
     nodejs7 \
-    npm7 \
+    npm13 \
     # patch is used by Ruby gem pg_query
     patch \
     perl-Perl-Critic \
@@ -93,6 +92,7 @@ RUN \
     php7-dom \
     php7-imagick \
     # Needed for PHP CodeSniffer
+    # Archive_Tar not found
     php7-pear-Archive_Tar \
     php7-tokenizer \
     php7-xmlwriter \
@@ -107,9 +107,9 @@ RUN \
     python3-pip \
     python3-devel \
     R-base \
-    ruby2.2 \
-    ruby2.2-devel \
-    ruby2.2-rubygem-bundler \
+    ruby2.7 \
+    ruby2.7-devel \
+    rubygem-bundler \
     ShellCheck \
     subversion \
     tar \
@@ -220,9 +220,7 @@ RUN \
   # Clear zypper cache
   time zypper clean -a && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # rocker TAG {{ .image }}_suse
-
 # Coala setup and python deps
 RUN cd / && \
   git clone --depth 1 --branch=$branch https://github.com/coala/coala.git && \
@@ -241,23 +239,19 @@ RUN cd / && \
   # NPM dependencies
   time npm install && npm cache clean && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 RUN time pear install PHP_CodeSniffer && \
   pear channel-discover pear.phpmd.org && \
   pear channel-discover pear.pdepend.org && \
   pear install --alldeps phpmd/PHP_PMD && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # Dart Lint setup
 RUN curl -fsSL https://storage.googleapis.com/dart-archive/channels/stable/release/1.14.2/sdk/dartsdk-linux-x64-release.zip -o /tmp/dart-sdk.zip && \
   unzip -n /tmp/dart-sdk.zip -d ~/ && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 RUN curl -fsSL https://github.com/avh4/elm-format/releases/download/0.5.2-alpha/elm-format-0.17-0.5.2-alpha-linux-x64.tgz -o /tmp/elm-format.tgz && \
   mkdir ~/elm-format-0.18 && \
   tar -xvzf /tmp/elm-format.tgz -C ~/elm-format-0.18 && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # GO setup
 RUN source /etc/profile.d/go.sh && time go get -u \
   github.com/golang/lint/golint \
@@ -267,7 +261,6 @@ RUN source /etc/profile.d/go.sh && time go get -u \
   github.com/BurntSushi/toml/cmd/tomlv \
   github.com/kisielk/errcheck && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # # Infer setup using opam
 # RUN useradd -ms /bin/bash opam && usermod -G wheel opam
 # RUN echo "opam ALL=(ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
@@ -293,7 +286,6 @@ RUN source /etc/profile.d/go.sh && time go get -u \
 # USER root
 # WORKDIR /
 # ENV PATH=$PATH:/home/opam/infer-linux64-v0.9.0/infer/bin
-
 # Julia setup
 RUN time julia -e 'Pkg.add("Lint")' && \
   rm -rf ~/.julia/.cache && \
@@ -306,12 +298,10 @@ RUN time julia -e 'Pkg.add("Lint")' && \
      */docs \
   ) && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # PMD setup
 RUN curl -fsSL https://github.com/pmd/pmd/releases/download/pmd_releases/5.4.1/pmd-bin-5.4.1.zip -o /tmp/pmd.zip && \
   unzip /tmp/pmd.zip -d ~/ && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # R setup
 RUN mkdir -p ~/.RLibrary && \
   echo '.libPaths( c( "~/.RLibrary", .libPaths()) )' >> ~/.Rprofile && \
@@ -333,7 +323,6 @@ RUN mkdir -p ~/.RLibrary && \
     && \
   unset ICUDT_DIR && export ICUDT_DIR && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # Tailor (Swift) setup
 RUN \
   cd /tmp && \
@@ -342,26 +331,21 @@ RUN \
   sed 's/read -r CONTINUE < \/dev\/tty/CONTINUE=y/' install.orig > install.sh && \
   time /bin/bash install.sh && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # # VHDL Bakalint Installation
 RUN curl -L 'http://downloads.sourceforge.net/project/fpgalibre/bakalint/0.4.0/bakalint-0.4.0.tar.gz' > /tmp/bl.tar.gz && \
   tar xf /tmp/bl.tar.gz -C /root/ && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # Add checkstyle image
 RUN mkdir -p /root/.local/share/coala-bears/CheckstyleBear && \
   curl -fsSL https://github.com/coala/bear-runtime-deps/raw/master/CheckstyleBear/checkstyle-6.15-all.jar -o /root/.local/share/coala-bears/CheckstyleBear/checkstyle-6.15-all.jar && \
   ln -s /root/.local/share/coala-bears/CheckstyleBear/checkstyle-6.15-all.jar /root/.local/share/coala-bears/CheckstyleBear/checkstyle.jar && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # Scalalint Installation
 RUN mkdir -p /root/.local/share/coala-bears/ScalaLintBear && \
   curl -fsSL https://github.com/coala/bear-runtime-deps/raw/master/ScalaLintBear/scalastyle_2.10-0.8.0-batch.jar -o /root/.local/share/coala-bears/ScalaLintBear/scalastyle_2.10-0.8.0-batch.jar && \
   ln -s /root/.local/share/coala-bears/ScalaLintBear/scalastyle_2.10-0.8.0-batch.jar /root/.local/share/coala-bears/ScalaLintBear/scalastyle.jar && \
   find /tmp -mindepth 1 -prune -exec rm -rf '{}' '+'
-
 # Entrypoint script
 ADD docker-coala.sh /usr/local/bin/
 CMD ["/usr/local/bin/docker-coala.sh"]
-
 # rocker TAG {{ .image }}
